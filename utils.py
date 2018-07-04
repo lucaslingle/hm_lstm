@@ -1,4 +1,5 @@
 import collections
+import tensorflow as tf
 
 _HM_LSTM_InputTuple = collections.namedtuple("HM_LSTM_InputTuple", ("h_t_below", "z_t_below", "h_prev_above"))
 
@@ -43,5 +44,4 @@ class HM_LSTM_StateTuple(_HM_LSTM_StateTuple):
         raise TypeError("Inconsistent internal state: %s vs %s" %
                         (str(c.dtype), str(z.dtype)))
     return c.dtype
-
 

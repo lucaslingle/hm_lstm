@@ -1,15 +1,8 @@
-from tensorflow.python.layers import base as base_layer
-from .utils import HM_LSTM_InputTuple, HM_LSTM_StateTuple
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import clip_ops
-from tensorflow.python.ops import nn_ops
+from utils import HM_LSTM_InputTuple, HM_LSTM_StateTuple
 from tensorflow.python.ops import variable_scope as vs
-from tensorflow.python.training import checkpointable
 from tensorflow.python.framework import ops
 from tensorflow.python.util import nest
-from tensorflow.python.ops.rnn_cell_impl import _WEIGHTS_VARIABLE_NAME, _BIAS_VARIABLE_NAME, RNNCell, MultiRNNCell
+from tensorflow.python.ops.rnn_cell_impl import MultiRNNCell
 import tensorflow as tf
 
 class Multi_HM_LSTM_Cell(MultiRNNCell):
@@ -48,9 +41,11 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
 
         if i == len(self._cells) - 1:
           h_prev_above = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], self._cells[i].output_size])
-          cur_state.z = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], 1])
+          #c, h, z = (cur_state.c, cur_state.h, cur_state.z)
+          #z = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], 1])
+          #cur_state = HM_LSTM_StateTuple(c=c, h=h, z=z)
         else:
-          h_prev_above = state[i + 1].h
+          h_prev_above = tf.identity(state[i + 1].h)
 
         cur_inp = tf.concat([cur_h_t_below, cur_z_t_below, h_prev_above], 1)
         h, new_state = cell(cur_inp, cur_state)
@@ -58,8 +53,8 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
         new_states.append(new_state)
         layer_outputs.append(h)
 
-        cur_h_t_below = h
-        cur_z_t_below = new_state.z
+        cur_h_t_below = tf.identity(h)
+        cur_z_t_below = tf.identity(new_state.z)
 
     new_states = tuple(new_states)
     h_out = tuple(layer_outputs)

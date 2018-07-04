@@ -1,13 +1,17 @@
+from utils import HM_LSTM_InputTuple, HM_LSTM_StateTuple
 from tensorflow.python.layers import base as base_layer
-from .utils import HM_LSTM_InputTuple, HM_LSTM_StateTuple
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.rnn_cell_impl import _WEIGHTS_VARIABLE_NAME, _BIAS_VARIABLE_NAME, RNNCell
 import tensorflow as tf
+
+
+@tf.RegisterGradient("StraightThrough")
+def _straight_through(op, grad):
+    return op.inputs[0]
 
 class HM_LSTM_Cell(RNNCell):
 
@@ -19,12 +23,13 @@ class HM_LSTM_Cell(RNNCell):
                name=None):
 
     super(HM_LSTM_Cell, self).__init__(_reuse=reuse, name=name)
+    self.input_spec = base_layer.InputSpec(ndim=2)
 
     self._num_units = num_units
     self._forget_bias = forget_bias
     self._slope = slope_annealing_placeholder
 
-    self._initializer = None
+    self._initializer = tf.orthogonal_initializer()
     self._state_is_tuple = True
 
     self._state_size = HM_LSTM_StateTuple(self._num_units, self._num_units, 1)
@@ -69,14 +74,15 @@ class HM_LSTM_Cell(RNNCell):
 
   def input2tuple(self, inputs):
       # Note: input to 'call' method is tf.concat([h_t_below, z_t_below, h_prev_above], 1)
-      input_depth = tf.shape(self._kernel)[1]
+
+      input_depth = tf.shape(inputs)[1]
 
       hb_dim = input_depth - 1 - self._output_size
       zb_dim = 1
       ha_dim = self._output_size
 
       h_t_below = inputs[:, 0:hb_dim]
-      z_t_below = inputs[:, hb_dim:(hb_dim + zb_dim)]
+      z_t_below = tf.expand_dims(inputs[:, hb_dim], 1)
       h_prev_above = inputs[:, (hb_dim + zb_dim):(hb_dim + zb_dim + ha_dim)]
 
       return HM_LSTM_InputTuple(h_t_below, z_t_below, h_prev_above)
@@ -84,10 +90,11 @@ class HM_LSTM_Cell(RNNCell):
   def call(self, inputs, state):
     sigmoid = math_ops.sigmoid
     tanh = math_ops.tanh
-    hard_sigm = lambda x: tf.maximum(0, (tf.minimum(1, (self._slope * x + 1) / 2)))
 
-    (h_t_below, z_t_below, h_prev_above) = self.input2tuple(inputs)
-    (c_prev, h_prev, z_prev) = state
+    input_ = self.input2tuple(inputs)
+
+    (h_t_below, z_t_below, h_prev_above) = (input_.h_t_below, input_.z_t_below, input_.h_prev_above)
+    (c_prev, h_prev, z_prev) = (state.c, state.h, state.z)
 
     # f = forget_gate, i = input_gate, o = output_gate, g = new_input
     lstm_matrix = math_ops.matmul(
@@ -98,7 +105,7 @@ class HM_LSTM_Cell(RNNCell):
         ], 1), self._kernel)
     lstm_matrix = nn_ops.bias_add(lstm_matrix, self._bias)
 
-    ztilde_t = tf.expand_dims(lstm_matrix[:,-1], 1)
+    ztilde = lstm_matrix[:,-1]
     lstm_matrix = lstm_matrix[:,0:-1]
 
     f, i, o, g = array_ops.split(
@@ -108,55 +115,39 @@ class HM_LSTM_Cell(RNNCell):
     i = sigmoid(i)
     o = sigmoid(o)
     g = tanh(g)
-    ztilde_t = hard_sigm(ztilde_t)
 
-    # We have to set multiple tensors using conditional computation based on the same condition.
-    #
-    # In the course of trying to do this, I discovered I had to tile some stuff.
-    # See https://www.tensorflow.org/api_docs/python/tf/where
+    '''
+    graph = tf.get_default_graph()
+    with ops.name_scope("ST_Sigmoid") as name:
+        with graph.gradient_override_map({"Sigmoid": "Identity"}):
+            ztilde_t = tf.sigmoid(self._slope * ztilde, name=name)
+    '''
+    #ztilde_t = tf.sigmoid(self._slope * ztilde)
+    ztilde_t = tf.maximum(0.0, tf.minimum(1.0, ((self._slope * ztilde + 1.0) / 2.0)))
 
-    batch_size = tf.shape(inputs)[0]
-
-    UPDATE = tf.tile(input=tf.constant('UPDATE', dtype=tf.string), multiples=[batch_size])
-    COPY = tf.tile(input=tf.constant('COPY', dtype=tf.string), multiples=[batch_size])
-    FLUSH = tf.tile(input=tf.constant('FLUSH', dtype=tf.string), multiples=[batch_size])
-
-    z_prev = tf.squeeze(z_prev, [1])
-    z_t_below = tf.squeeze(z_t_below, [1])
-
-    # this is a tensor of strings; each row is a string indicating which operation the cell ought to perform
-    op_selector = tf.where(
-        tf.equal(z_prev, tf.constant(0., dtype=tf.float32)),
-        tf.where(
-            tf.equal(z_t_below, tf.constant(1., dtype=tf.float32)),
-            UPDATE,
-            COPY
-        ),
-        FLUSH
-    )
-
-    # set the cell state based on which operation we're performing
     c = tf.where(
-            tf.equal(op_selector, 'UPDATE'),
-            f * c_prev + i * g,
-            tf.where(
-                tf.equal(op_selector, 'COPY'),
-                c_prev,
-                i * g
-            )
+        tf.equal(tf.squeeze(z_prev, [1]), tf.constant(0., dtype=tf.float32)),
+        tf.where(
+            tf.equal(tf.squeeze(z_t_below, [1]), tf.constant(1., dtype=tf.float32)),
+            tf.add(tf.multiply(f, c_prev), tf.multiply(i, g)),  # UPDATE
+            tf.identity(c_prev)                                 # COPY
+        ),
+        tf.multiply(i, g, name='c')                             # FLUSH
     )
 
     # set the hidden state based on which operation we're performing
     h = tf.where(
-        tf.equal(op_selector, 'COPY'),
-        h_prev,
-        o * tanh(c)
+        tf.logical_and(
+            tf.equal(tf.squeeze(z_t_below, [1]), tf.constant(0., dtype=tf.float32)),
+            tf.equal(tf.squeeze(z_prev, [1]), tf.constant(0., dtype=tf.float32))),
+        tf.identity(h_prev),
+        tf.multiply(o, tanh(c))
     )
 
     graph = tf.get_default_graph()
-    with ops.name_scope('BinaryRound') as name:
-        with graph.gradient_override_map({'Round': 'Identity'}):
+    with ops.name_scope("ST_Round") as name:
+        with graph.gradient_override_map({"Round": "Identity"}):
             z = tf.round(ztilde_t, name=name)
 
-    new_state = HM_LSTM_StateTuple(c=c, h=h, z=z)
+    new_state = HM_LSTM_StateTuple(c=c, h=h, z=tf.expand_dims(z, 1))
     return h, new_state
