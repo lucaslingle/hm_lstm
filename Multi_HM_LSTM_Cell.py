@@ -41,9 +41,9 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
 
         if i == len(self._cells) - 1:
           h_prev_above = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], self._cells[i].output_size])
-          #c, h, z = (cur_state.c, cur_state.h, cur_state.z)
-          #z = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], 1])
-          #cur_state = HM_LSTM_StateTuple(c=c, h=h, z=z)
+          c, h, z = (cur_state.c, cur_state.h, cur_state.z)
+          z = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], 1])
+          cur_state = HM_LSTM_StateTuple(c=c, h=h, z=z)
         else:
           h_prev_above = tf.identity(state[i + 1].h)
 
