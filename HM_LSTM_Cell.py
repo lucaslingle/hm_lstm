@@ -7,11 +7,7 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.rnn_cell_impl import _WEIGHTS_VARIABLE_NAME, _BIAS_VARIABLE_NAME, RNNCell
 import tensorflow as tf
-
-
-@tf.RegisterGradient("StraightThrough")
-def _straight_through(op, grad):
-    return op.inputs[0]
+import math
 
 class HM_LSTM_Cell(RNNCell):
 
@@ -29,8 +25,12 @@ class HM_LSTM_Cell(RNNCell):
     self._forget_bias = forget_bias
     self._slope = slope_annealing_placeholder
 
-    self._initializer = tf.orthogonal_initializer()
     self._state_is_tuple = True
+
+    self._kernel_initializer = tf.orthogonal_initializer()
+
+    self._kernel_z_initializer = tf.random_uniform_initializer(
+        minval=-1.0 / math.sqrt(self._num_units), maxval=1.0 / math.sqrt(self._num_units))
 
     self._state_size = HM_LSTM_StateTuple(self._num_units, self._num_units, 1)
     self._output_size = self._num_units
@@ -62,13 +62,18 @@ class HM_LSTM_Cell(RNNCell):
 
     self._kernel = self.add_variable(
         _WEIGHTS_VARIABLE_NAME,
-        shape=[self._num_units + ha_dim + hb_dim, 4 * self._num_units + 1],
-        initializer=self._initializer)
+        shape=[self._num_units + ha_dim + hb_dim, 4 * self._num_units],
+        initializer=self._kernel_initializer)
 
     self._bias = self.add_variable(
         _BIAS_VARIABLE_NAME,
-        shape=[4 * self._num_units + 1],
+        shape=[4 * self._num_units],
         initializer=init_ops.zeros_initializer(dtype=self.dtype))
+
+    self._kernel_z =  self.add_variable(
+        _WEIGHTS_VARIABLE_NAME + '_z',
+        shape=[self._num_units + ha_dim + hb_dim, 1],
+        initializer=self._kernel_z_initializer)
 
     self.built = True
 
@@ -105,8 +110,12 @@ class HM_LSTM_Cell(RNNCell):
         ], 1), self._kernel)
     lstm_matrix = nn_ops.bias_add(lstm_matrix, self._bias)
 
-    ztilde = lstm_matrix[:,-1]
-    lstm_matrix = lstm_matrix[:,0:-1]
+    ztilde = math_ops.matmul(
+        array_ops.concat([
+            h_prev,  # recurrent
+            z_prev * h_prev_above,  # top-down
+            z_t_below * h_t_below  # bottom-up
+        ], 1), self._kernel_z)
 
     f, i, o, g = array_ops.split(
         value=lstm_matrix, num_or_size_splits=4, axis=1)
@@ -149,5 +158,5 @@ class HM_LSTM_Cell(RNNCell):
         with graph.gradient_override_map({"Round": "Identity"}):
             z = tf.round(ztilde_t, name=name)
 
-    new_state = HM_LSTM_StateTuple(c=c, h=h, z=tf.expand_dims(z, 1))
+    new_state = HM_LSTM_StateTuple(c=c, h=h, z=z)
     return h, new_state
