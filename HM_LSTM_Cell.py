@@ -7,7 +7,6 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.rnn_cell_impl import _WEIGHTS_VARIABLE_NAME, _BIAS_VARIABLE_NAME, RNNCell
 import tensorflow as tf
-import math
 
 class HM_LSTM_Cell(RNNCell):
 
@@ -29,8 +28,7 @@ class HM_LSTM_Cell(RNNCell):
 
     self._kernel_initializer = tf.orthogonal_initializer()
 
-    self._kernel_z_initializer = tf.random_uniform_initializer(
-        minval=-1.0 / math.sqrt(self._num_units), maxval=1.0 / math.sqrt(self._num_units))
+    self._kernel_z_initializer = tf.glorot_uniform_initializer()
 
     self._state_size = HM_LSTM_StateTuple(self._num_units, self._num_units, 1)
     self._output_size = self._num_units
@@ -117,6 +115,10 @@ class HM_LSTM_Cell(RNNCell):
             z_t_below * h_t_below  # bottom-up
         ], 1), self._kernel_z)
 
+    # seems to be a performance degredation when using a bias on ztilde
+    # -- even a zero-initialized one
+    # -- so i have omitted it.
+
     f, i, o, g = array_ops.split(
         value=lstm_matrix, num_or_size_splits=4, axis=1)
 
@@ -138,10 +140,10 @@ class HM_LSTM_Cell(RNNCell):
         tf.equal(tf.squeeze(z_prev, [1]), tf.constant(0., dtype=tf.float32)),
         tf.where(
             tf.equal(tf.squeeze(z_t_below, [1]), tf.constant(1., dtype=tf.float32)),
-            tf.add(tf.multiply(f, c_prev), tf.multiply(i, g)),  # UPDATE
-            tf.identity(c_prev)                                 # COPY
+            f * c_prev + i * g,                    # UPDATE
+            c_prev                                 # COPY
         ),
-        tf.multiply(i, g, name='c')                             # FLUSH
+        i * g                                      # FLUSH
     )
 
     # set the hidden state based on which operation we're performing
@@ -149,8 +151,8 @@ class HM_LSTM_Cell(RNNCell):
         tf.logical_and(
             tf.equal(tf.squeeze(z_t_below, [1]), tf.constant(0., dtype=tf.float32)),
             tf.equal(tf.squeeze(z_prev, [1]), tf.constant(0., dtype=tf.float32))),
-        tf.identity(h_prev),
-        tf.multiply(o, tanh(c))
+        h_prev,
+        o * tanh(c)
     )
 
     graph = tf.get_default_graph()
