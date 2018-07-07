@@ -73,11 +73,6 @@ class HM_LSTM_Cell(RNNCell):
         shape=[self._num_units + ha_dim + hb_dim, 1],
         initializer=self._kernel_z_initializer)
 
-    self._bias_z = self.add_variable(
-        _BIAS_VARIABLE_NAME + '_z',
-        shape=[1],
-        initializer=init_ops.zeros_initializer(dtype=self.dtype))
-
     self.built = True
 
   def input2tuple(self, inputs):
@@ -119,7 +114,6 @@ class HM_LSTM_Cell(RNNCell):
             z_prev * h_prev_above, # top-down
             z_t_below * h_t_below  # bottom-up
         ], 1), self._kernel_z)
-    ztilde = nn_ops.bias_add(ztilde, self._bias_z)
 
     f, i, o, g = array_ops.split(
         value=lstm_matrix, num_or_size_splits=4, axis=1)
