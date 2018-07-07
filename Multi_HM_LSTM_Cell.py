@@ -48,7 +48,7 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
         h, new_state = cell(cur_inp, cur_state)
 
         if i == len(self._cells) - 1:
-          new_c, new_h, new_z = (new_state.c, cur_state.h, cur_state.z)
+          new_c, new_h, new_z = (new_state.c, new_state.h, new_state.z)
           new_z = tf.zeros(dtype=tf.float32, shape=[tf.shape(inputs)[0], 1])
           new_state = HM_LSTM_StateTuple(c=new_c, h=new_h, z=new_z)
 
