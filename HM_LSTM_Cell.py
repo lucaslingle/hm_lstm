@@ -110,14 +110,10 @@ class HM_LSTM_Cell(RNNCell):
 
     ztilde = math_ops.matmul(
         array_ops.concat([
-            h_prev,  # recurrent
-            z_prev * h_prev_above,  # top-down
+            h_prev,                # recurrent
+            z_prev * h_prev_above, # top-down
             z_t_below * h_t_below  # bottom-up
         ], 1), self._kernel_z)
-
-    # seems to be a performance degredation when using a bias on ztilde
-    # -- even a zero-initialized one
-    # -- so i have omitted it.
 
     f, i, o, g = array_ops.split(
         value=lstm_matrix, num_or_size_splits=4, axis=1)
@@ -127,15 +123,9 @@ class HM_LSTM_Cell(RNNCell):
     o = sigmoid(o)
     g = tanh(g)
 
-    '''
-    graph = tf.get_default_graph()
-    with ops.name_scope("ST_Sigmoid") as name:
-        with graph.gradient_override_map({"Sigmoid": "Identity"}):
-            ztilde_t = tf.sigmoid(self._slope * ztilde, name=name)
-    '''
-    #ztilde_t = tf.sigmoid(self._slope * ztilde)
     ztilde_t = tf.maximum(0.0, tf.minimum(1.0, ((self._slope * ztilde + 1.0) / 2.0)))
 
+    # set the cell state based on which operation we're performing
     c = tf.where(
         tf.equal(tf.squeeze(z_prev, [1]), tf.constant(0., dtype=tf.float32)),
         tf.where(
