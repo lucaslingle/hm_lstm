@@ -7,9 +7,11 @@ import tensorflow as tf
 
 class Multi_HM_LSTM_Cell(MultiRNNCell):
 
-  def __init__(self, cells):
+  def __init__(self, cells, output_embedder=None):
     super(Multi_HM_LSTM_Cell, self).__init__(cells=cells)
     self._state_is_tuple = True
+
+    self._output_embedder = output_embedder
 
   @property
   def state_size(self):
@@ -17,7 +19,11 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
 
   @property
   def output_size(self):
-    return tuple(cell.output_size for cell in self._cells)
+    if self._output_embedder is None:
+      return tuple(cell.output_size for cell in self._cells)
+    else:
+      return self._output_embedder.output_size
+
 
   def zero_state(self, batch_size, dtype):
     with ops.name_scope(type(self).__name__ + "ZeroState", values=[batch_size]):
@@ -59,6 +65,11 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
         cur_z_t_below = tf.identity(new_state.z)
 
     new_states = tuple(new_states)
-    h_out = tuple(layer_outputs)
+    layer_outputs = tuple(layer_outputs)
+
+    if self._output_embedder is not None:
+      h_out = self._output_embedder.apply(layer_outputs)
+    else:
+      h_out = layer_outputs
 
     return h_out, new_states
