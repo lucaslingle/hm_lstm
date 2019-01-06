@@ -3,7 +3,7 @@ Hierarchical Multiscale Recurrent Neural Networks in Tensorflow
 
 Implementation of Chung et al., 2016 - 'Hierarchical Multiscale Recurrent Neural Networks'
 
-![alt tag](assets/hmrnn_picture.png?raw=true)
+![alt tag](assets/hmrnn_picture_with_border.png?raw=true)
 
 How to use:
 -----------
