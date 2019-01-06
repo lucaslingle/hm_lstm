@@ -10,7 +10,7 @@ Unlike Clockwork RNNs, which update on a regular schedule involving powers of 2,
 
 As demonstrated by Chung et al., the boundary detectors learnt for character-level language modeling have substantial overlap with the ends of words:
 
-![alt tag](assets/hmrnn_boundary_detectors.png?raw=true)
+![alt tag](assets/hmrnn_boundary_detectors_small.png?raw=true)
 
 How to use:
 -----------
