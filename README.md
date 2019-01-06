@@ -6,7 +6,7 @@ Implementation of Chung et al., 2016 - ['Hierarchical Multiscale Recurrent Neura
 ![alt tag](assets/hmrnn_picture_with_border.png?raw=true)
 
 The paper focuses on modeling the hierarchical structure of sequential data while also recognizing that the hierarchical structure may manifest itself at irregular intervals. 
-Unlike Clockwork RNNs, which update on a regular schedule involving powers of 2, HM-RNN learns a 'boundery detector' mechanism to determine when to update higher-level cells.
+Unlike Clockwork RNNs, which update on a regular schedule involving powers of 2, HM-RNN learns a 'boundary detector' mechanism to determine when to update higher-level cells.
 
 As demonstrated by Chung et al., the boundary detectors learnt for character-level language modeling have substantial overlap with the ends of words:
 
