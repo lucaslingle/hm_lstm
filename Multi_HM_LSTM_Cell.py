@@ -52,17 +52,20 @@ class Multi_HM_LSTM_Cell(MultiRNNCell):
 
         cur_inp = tf.concat([cur_h_t_below, cur_z_t_below, h_prev_above], 1)
         h, new_state = cell(cur_inp, cur_state)
+        # Note:
+        #   output h going to the next layer will have dropout
+        #   if cell is wrapped in DropoutWrapper and output_keep_prob < 1.0
 
         if i == len(self._cells) - 1:
           new_c, new_h, new_z = (new_state.c, new_state.h, new_state.z)
           new_z = tf.zeros_like(new_z, dtype=tf.float32)
           new_state = HM_LSTM_StateTuple(c=new_c, h=new_h, z=new_z)
 
-        new_states.append(new_state)
-        layer_outputs.append(h)
-
         cur_h_t_below = tf.identity(h)
         cur_z_t_below = tf.identity(new_state.z)
+
+        new_states.append(new_state)
+        layer_outputs.append(h)
 
     new_states = tuple(new_states)
     layer_outputs = tuple(layer_outputs)

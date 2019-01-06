@@ -1,19 +1,22 @@
 import tensorflow as tf
 
 class HM_LSTM_Output_Embedder:
+    """
+    Explanation here:
+    https://github.com/lucaslingle/hm_lstm/pull/4
+    """
 
-  def __init__(self, num_layers, hidden_dim, output_emb_dim, activation=tf.nn.relu):
+    def __init__(self, num_layers, hidden_dim, output_emb_dim, activation=tf.nn.relu):
+        self._num_layers = num_layers
+        self._hidden_dim = hidden_dim
+        self._output_emb_dim = output_emb_dim
+        self._activation = activation
 
-      self._num_layers = num_layers
-      self._hidden_dim = hidden_dim
-      self._output_emb_dim = output_emb_dim
-      self._activation = activation
+    @property
+    def output_size(self):
+        return self._output_emb_dim
 
-  @property
-  def output_size(self):
-      return self._output_emb_dim
-
-  def apply(self, layer_outputs):
+    def apply(self, layer_outputs):
       assert type(layer_outputs) == tuple
       assert len(layer_outputs) == self._num_layers
       assert layer_outputs[0].get_shape().as_list()[-1] == self._hidden_dim
@@ -44,6 +47,4 @@ class HM_LSTM_Output_Embedder:
       # shape: [batch_size, output_emb_dim]
 
       return h_out_emb
-
-
 
